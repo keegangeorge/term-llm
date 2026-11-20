@@ -250,7 +250,7 @@ export function timelineView(
   }
   function focusBar(index: number) {
     restoringFocus = true;
-    bar(index)?.focus();
+    bar(index)?.focus({ preventScroll: true });
     restoringFocus = false;
   }
   function dismiss(restore: boolean) {
@@ -402,7 +402,9 @@ export function timelineView(
     });
     for (const slot of chart.querySelectorAll<SVGGElement>('[data-bucket]')) {
       const index = Number(slot.dataset.bucket);
-      slot.addEventListener('pointerenter', (event) => {
+      // Layout changes (including dismissing the card) can generate pointerenter
+      // without pointer motion. Only actual movement should open a hover card.
+      slot.addEventListener('pointermove', (event) => {
         if (event.pointerType === 'touch' || index === selected) return;
         hoverSelection = true;
         inspect(index);

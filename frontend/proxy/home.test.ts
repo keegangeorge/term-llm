@@ -115,6 +115,22 @@ it('selects by pointer, tap and keyboard, showing amounts, clients and missing c
   expect(view.querySelector('[data-bucket="1"]')).toHaveFocus();
   expect(view.querySelector('.timeline-tooltip')).toHaveTextContent('No activity');
 });
+it('keeps bucket details dismissed when the pointer is exposed to the chart underneath', () => {
+  const { view } = mount();
+  const first = view.querySelector('[data-bucket="0"]')!;
+  const second = view.querySelector('[data-bucket="1"]')!;
+  const tip = view.querySelector('.timeline-tooltip')!;
+  fireEvent.click(first);
+  fireEvent.click(getByRole(view, 'button', { name: 'Dismiss bucket details' }));
+  expect(tip).toHaveAttribute('hidden');
+  expect(first).toHaveFocus();
+  // Removing the card can expose a slot and dispatch a boundary event without mouse motion.
+  fireEvent.pointerEnter(second);
+  expect(tip).toHaveAttribute('hidden');
+  fireEvent.pointerMove(second);
+  expect(tip).not.toHaveAttribute('hidden');
+  expect(second).toHaveAttribute('aria-pressed', 'true');
+});
 it('shows the interval’s top 20 by the active metric and currency without truncating its total', () => {
   const rows = Array.from({ length: 22 }, (_, i) =>
     series({
@@ -133,7 +149,7 @@ it('shows the interval’s top 20 by the active metric and currency without trun
     series({ ...rows[0]!, costs: [{ currency: 'USD', micros: 500_000_000, estimated: false }] }),
   ];
   const { view } = mount(initial);
-  const hover = (i: number) => fireEvent.pointerEnter(view.querySelector(`[data-bucket="${i}"]`)!);
+  const hover = (i: number) => fireEvent.pointerMove(view.querySelector(`[data-bucket="${i}"]`)!);
   const tip = view.querySelector<HTMLElement>('.timeline-tooltip')!;
   const names = () =>
     Array.from(tip.querySelectorAll('.timeline-tooltip-row span'), (el) => el.textContent);
