@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
@@ -8,6 +9,7 @@ import (
 	"github.com/term-llm/term-llm/internal/app/providers"
 	"github.com/term-llm/term-llm/internal/config"
 	"github.com/term-llm/term-llm/internal/llm"
+	"github.com/term-llm/term-llm/internal/llm/providers/clibin"
 )
 
 // spawnModelCredentials memoizes the local login probes behind provider
@@ -48,22 +50,31 @@ func (c SpawnModelCatalog) spawnModelProviders() []string {
 	return names
 }
 
-// ValidateSpawnModel rejects a provider:model override whose provider this
+// ResolveSpawnModel rejects a provider:model override whose provider this
 // host does not enable. ApplyModelOverride treats an unknown prefix as part of
 // a plain model name (for colon-tagged local models), so without this check a
 // guessed prefix such as "codex:" or "expensive:" reaches the default
 // provider's API and the child fails there.
-func (c SpawnModelCatalog) ValidateSpawnModel(model string) error {
+func (c SpawnModelCatalog) ResolveSpawnModel(ctx context.Context, model string) (string, error) {
 	if c.cfg == nil {
-		return nil
+		return model, nil
 	}
 	enabled := c.spawnModelProviders()
 	provider, modelName, err := llm.ParseProviderModel(model, c.cfg)
 	if err == nil && !c.cfg.ProviderDisabled(provider) && (provider == "debug" || slices.Contains(enabled, provider)) {
-		if policyErr := llm.CheckProviderModelAllowed(c.cfg, provider, modelName); policyErr != nil {
-			return fmt.Errorf("model %q: %w; omit model to use the agent's default", model, policyErr)
+		pc := c.cfg.Providers[provider]
+		if _, configured := config.ModelConfigForProviderModel(c.cfg, provider, modelName); !configured &&
+			!slices.Contains(pc.Models, modelName) && pc.Model != modelName &&
+			config.InferProviderType(provider, pc.Type) == "agy-bin" {
+			modelName, err = clibin.NewAgyBinProvider(pc.Model, pc.Env).ResolveModelShorthand(ctx, modelName)
+			if err != nil {
+				return "", fmt.Errorf("model %q: %w", model, err)
+			}
 		}
-		return nil
+		if policyErr := llm.CheckProviderModelAllowed(c.cfg, provider, modelName); policyErr != nil {
+			return "", fmt.Errorf("model %q: %w; omit model to use the agent's default", model, policyErr)
+		}
+		return provider + ":" + modelName, nil
 	}
 	name, _, _ := strings.Cut(model, ":")
 	reason := fmt.Sprintf("provider %q is not enabled on this host", name)
@@ -71,10 +82,10 @@ func (c SpawnModelCatalog) ValidateSpawnModel(model string) error {
 		reason = fmt.Sprintf("unknown provider %q", name)
 	}
 	if len(enabled) == 0 {
-		return fmt.Errorf("model %q: %s; omit model to use the agent's default", model, reason)
+		return "", fmt.Errorf("model %q: %s; omit model to use the agent's default", model, reason)
 	}
 	suggestions, example := spawnModelSuggestions(enabled, c.cfg.DefaultProvider)
-	return fmt.Errorf("model %q: %s; use one of %s (for example %q), or omit model to use the agent's default",
+	return "", fmt.Errorf("model %q: %s; use one of %s (for example %q), or omit model to use the agent's default",
 		model, reason, suggestions, example+":<model>")
 }
 

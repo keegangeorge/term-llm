@@ -1,7 +1,11 @@
 package agent
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -33,7 +37,7 @@ func TestSpawnModelProvidersMatchPickerDiscovery(t *testing.T) {
 	}
 }
 
-func TestValidateSpawnModel(t *testing.T) {
+func TestResolveSpawnModel(t *testing.T) {
 	catalog := configDiscoveryCatalog()
 	tests := []struct {
 		name, model, wantErr string
@@ -49,54 +53,54 @@ func TestValidateSpawnModel(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := catalog.ValidateSpawnModel(tt.model)
+			_, err := catalog.ResolveSpawnModel(context.Background(), tt.model)
 			if tt.wantErr == "" {
 				if err != nil {
-					t.Fatalf("ValidateSpawnModel(%q) = %v, want nil", tt.model, err)
+					t.Fatalf("ResolveSpawnModel(%q) = %v, want nil", tt.model, err)
 				}
 				return
 			}
 			if err == nil {
-				t.Fatalf("ValidateSpawnModel(%q) = nil, want error", tt.model)
+				t.Fatalf("ResolveSpawnModel(%q) = nil, want error", tt.model)
 			}
 			for _, want := range []string{tt.wantErr, "use one of chatgpt, claude-bin", `"chatgpt:<model>"`, "omit model"} {
 				if !strings.Contains(err.Error(), want) {
-					t.Fatalf("ValidateSpawnModel(%q) = %q, want it to contain %q", tt.model, err, want)
+					t.Fatalf("ResolveSpawnModel(%q) = %q, want it to contain %q", tt.model, err, want)
 				}
 			}
 		})
 	}
 }
 
-func TestValidateSpawnModelRejectsExplicitlyDisabledDebug(t *testing.T) {
+func TestResolveSpawnModelRejectsExplicitlyDisabledDebug(t *testing.T) {
 	catalog := configDiscoveryCatalog()
 	disabled := false
 	catalog.cfg.Providers["debug"] = config.ProviderConfig{Enabled: &disabled}
-	err := catalog.ValidateSpawnModel("debug:fast")
+	_, err := catalog.ResolveSpawnModel(context.Background(), "debug:fast")
 	if err == nil || !strings.Contains(err.Error(), `provider "debug" is not enabled on this host`) {
-		t.Fatalf("ValidateSpawnModel(disabled debug) = %v, want early rejection", err)
+		t.Fatalf("ResolveSpawnModel(disabled debug) = %v, want early rejection", err)
 	}
 }
 
-func TestValidateSpawnModelRejectsProviderBlockedModel(t *testing.T) {
+func TestResolveSpawnModelRejectsProviderBlockedModel(t *testing.T) {
 	catalog := configDiscoveryCatalog()
 	chatgpt := catalog.cfg.Providers["chatgpt"]
 	chatgpt.AllowedModels = []string{"gpt-allowed"}
 	catalog.cfg.Providers["chatgpt"] = chatgpt
 
-	err := catalog.ValidateSpawnModel("chatgpt:gpt-blocked")
+	_, err := catalog.ResolveSpawnModel(context.Background(), "chatgpt:gpt-blocked")
 	if err == nil || !strings.Contains(err.Error(), "providers.chatgpt.allowed_models") || !strings.Contains(err.Error(), "gpt-allowed") {
-		t.Fatalf("ValidateSpawnModel() = %v, want provider allowlist denial with allowed entry", err)
+		t.Fatalf("ResolveSpawnModel() = %v, want provider allowlist denial with allowed entry", err)
 	}
 	if strings.Contains(err.Error(), "gpt-5.6-luna") || strings.Contains(err.Error(), "gpt-5.4") {
 		t.Fatalf("provider denial enumerated a catalog: %v", err)
 	}
-	if err := catalog.ValidateSpawnModel("chatgpt:gpt-allowed"); err != nil {
-		t.Fatalf("ValidateSpawnModel(allowed) = %v", err)
+	if _, err := catalog.ResolveSpawnModel(context.Background(), "chatgpt:gpt-allowed"); err != nil {
+		t.Fatalf("ResolveSpawnModel(allowed) = %v", err)
 	}
 }
 
-func TestValidateSpawnModelBoundsRecoverySuggestions(t *testing.T) {
+func TestResolveSpawnModelBoundsRecoverySuggestions(t *testing.T) {
 	for _, count := range []int{0, 1, 3, 4, 40} {
 		t.Run(fmt.Sprintf("%d providers", count), func(t *testing.T) {
 			cfg := &config.Config{
@@ -114,7 +118,7 @@ func TestValidateSpawnModelBoundsRecoverySuggestions(t *testing.T) {
 				// Prefer the default even when it sorts last in a large catalog.
 				cfg.DefaultProvider = fmt.Sprintf("custom-%02d", count-1)
 			}
-			err := NewSpawnModelCatalog(cfg).ValidateSpawnModel("codex:guessed-model")
+			_, err := NewSpawnModelCatalog(cfg).ResolveSpawnModel(context.Background(), "codex:guessed-model")
 			if err == nil {
 				t.Fatal("expected unknown provider error")
 			}
@@ -158,7 +162,31 @@ func TestSpawnModelCatalogWithoutConfigAllowsEverything(t *testing.T) {
 	if got := catalog.spawnModelProviders(); got != nil {
 		t.Fatalf("SpawnModelProviders() = %v, want nil", got)
 	}
-	if err := catalog.ValidateSpawnModel("codex:gpt-5.4"); err != nil {
-		t.Fatalf("ValidateSpawnModel() = %v, want nil without config", err)
+	if _, err := catalog.ResolveSpawnModel(context.Background(), "codex:gpt-5.4"); err != nil {
+		t.Fatalf("ResolveSpawnModel() = %v, want nil without config", err)
+	}
+}
+
+func TestResolveSpawnModelUsesAgyCatalogBeforeCheckingAllowlist(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake agy executable uses a POSIX shell")
+	}
+	bin := t.TempDir()
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	if err := os.WriteFile(filepath.Join(bin, "agy"), []byte("#!/bin/sh\n[ \"$1\" = models ] || exit 1\nprintf 'claude-opus-5-5-medium\\tClaude Opus 5.5 (Medium)\\nclaude-opus-5-5-high\\tClaude Opus 5.5 (High)\\n'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	catalog := configDiscoveryCatalog()
+	catalog.cfg.Providers["agy-bin"] = config.ProviderConfig{AllowedModels: []string{"claude-opus-5-5-medium"}}
+	got, err := catalog.ResolveSpawnModel(context.Background(), "agy-bin:opus")
+	if err != nil || got != "agy-bin:claude-opus-5-5-medium" {
+		t.Fatalf("default shorthand = %q, %v", got, err)
+	}
+	if _, err := catalog.ResolveSpawnModel(context.Background(), "agy-bin:opus-high"); err == nil || !strings.Contains(err.Error(), "providers.agy-bin.allowed_models") {
+		t.Fatalf("explicit high effort was not rejected: %v", err)
+	}
+	if got, err := catalog.ResolveSpawnModel(context.Background(), "claude-bin:opus"); err != nil || got != "claude-bin:opus" {
+		t.Fatalf("Claude Code alias = %q, %v", got, err)
 	}
 }

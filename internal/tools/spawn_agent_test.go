@@ -379,15 +379,18 @@ type modelCatalogMockRunner struct {
 	validated []string
 }
 
-func (r *modelCatalogMockRunner) ValidateSpawnModel(model string) error {
+func (r *modelCatalogMockRunner) ResolveSpawnModel(_ context.Context, model string) (string, error) {
 	r.validated = append(r.validated, model)
 	provider, _, _ := strings.Cut(model, ":")
 	for _, enabled := range r.providers {
 		if provider == enabled {
-			return nil
+			if model == "agy-bin:opus" {
+				return "agy-bin:claude-opus-5-5-medium", nil
+			}
+			return model, nil
 		}
 	}
-	return errors.New("unknown provider " + provider)
+	return "", errors.New("unknown provider " + provider)
 }
 
 func spawnModelDescription(t *testing.T, tool *SpawnAgentTool) string {
@@ -445,6 +448,19 @@ func TestSpawnAgentTool_ModelArgumentRejectedByCatalog(t *testing.T) {
 	}
 	if calls := runner.GetCalls(); len(calls) != 1 || calls[0].ModelOverride != "chatgpt:gpt-5.4" {
 		t.Fatalf("runner calls = %#v, want one chatgpt:gpt-5.4 run", calls)
+	}
+}
+
+func TestSpawnAgentTool_LaunchesResolvedModel(t *testing.T) {
+	tool := NewSpawnAgentTool(SpawnConfig{MaxDepth: 5, DefaultTimeout: 300}, 0)
+	runner := &modelCatalogMockRunner{mockRunner: newMockRunner(), providers: []string{"agy-bin"}}
+	tool.SetRunner(runner)
+	result, err := tool.Execute(context.Background(), makeSpawnArgsWithModel("reviewer", "inspect", 0, "agy-bin:opus"))
+	if err != nil || result.IsError {
+		t.Fatalf("spawn failed: %v: %s", err, result.Content)
+	}
+	if calls := runner.GetCalls(); len(calls) != 1 || calls[0].ModelOverride != "agy-bin:claude-opus-5-5-medium" {
+		t.Fatalf("runner calls = %#v, want one run with the resolved model", calls)
 	}
 }
 

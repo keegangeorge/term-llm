@@ -2,6 +2,7 @@
 package spawnmodel
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"unicode"
@@ -11,25 +12,25 @@ import (
 // against the providers this host enables. Recovery guidance belongs in
 // validation errors, not in the tool schema.
 type Catalog interface {
-	// ValidateSpawnModel reports why an explicit provider:model override
-	// cannot be used, or nil when it can.
-	ValidateSpawnModel(model string) error
+	// ResolveSpawnModel validates the selector and resolves supported shorthands
+	// to concrete provider:model selectors.
+	ResolveSpawnModel(ctx context.Context, model string) (string, error)
 }
 
-// Validate checks a model override requested through spawn_agent. Models set
+// Resolve checks a model override requested through spawn_agent. Models set
 // in agent configuration do not pass through here: they may be plain or
 // colon-tagged names such as "llama3:8b".
-func Validate(runner any, model string) error {
+func Resolve(ctx context.Context, runner any, model string) (string, error) {
 	if model == "" {
-		return nil
+		return model, nil
 	}
 	if !qualified(model) {
-		return errors.New("model must use exact provider:model format; omit it to use the configured/default model")
+		return "", errors.New("model must use provider:model format; omit it to use the configured/default model")
 	}
 	if catalog, ok := runner.(Catalog); ok {
-		return catalog.ValidateSpawnModel(model)
+		return catalog.ResolveSpawnModel(ctx, model)
 	}
-	return nil
+	return model, nil
 }
 
 func qualified(model string) bool {

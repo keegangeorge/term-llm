@@ -368,7 +368,7 @@ Guidelines:
 				"cwd":              map[string]any{"type": "string", "description": "Optional existing child working directory; relative paths resolve against the parent's current working directory. Access still requires normal workspace approval."},
 				"model": map[string]any{
 					"type":        "string",
-					"description": "Optional model override in exact provider:model format. If omitted, the sub-agent uses its configured/default model.",
+					"description": "Optional model override in provider:model format. Use an exact model ID or a supported provider shorthand. If omitted, the sub-agent uses its configured/default model.",
 					"pattern":     `^[^:\s]+:\S+$`,
 				},
 			},
@@ -538,8 +538,8 @@ func (t *SpawnAgentTool) Execute(ctx context.Context, args json.RawMessage) (cor
 		}
 		return spawnAgentErrorOutput(t.formatError(errType, policyErr.Error()), false), nil
 	}
-	requestedModel := a.Model
-	if err := spawnmodel.Validate(runner, requestedModel); err != nil {
+	requestedModel, err := spawnmodel.Resolve(ctx, runner, a.Model)
+	if err != nil {
 		return spawnAgentErrorOutput(t.formatError(ErrInvalidParams, err.Error()), false), nil
 	}
 
