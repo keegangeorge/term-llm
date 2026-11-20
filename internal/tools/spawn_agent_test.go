@@ -1541,8 +1541,8 @@ func TestSpawnAgentTool_Spec(t *testing.T) {
 		t.Fatal("model property should be an object")
 	}
 	modelDescription, _ := modelProp["description"].(string)
-	if !strings.Contains(modelDescription, "exact provider:model format") {
-		t.Errorf("model description = %q, want exact provider:model requirement", modelDescription)
+	if !strings.Contains(modelDescription, "provider:model format") || !strings.Contains(modelDescription, "supported provider shorthand") {
+		t.Errorf("model description = %q, want provider:model format and shorthand guidance", modelDescription)
 	}
 	if strings.Contains(strings.ToLower(modelDescription), "alias") {
 		t.Errorf("model description should not advertise aliases: %q", modelDescription)
