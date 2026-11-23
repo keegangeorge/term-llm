@@ -102,8 +102,13 @@ func TestExtensionRoutesAndRecovery(t *testing.T) {
 		if w.Code != tc.code {
 			t.Fatalf("%s: %d %s", tc.path, w.Code, w.Body)
 		}
-		if strings.HasPrefix(tc.path, "/extensions/") && w.Header().Get("Cache-Control") != "private, no-store" {
-			t.Fatal("asset cache policy")
+		// Generation-scoped assets are immutable; reload-needed responses are not.
+		wantCache := "private, no-store"
+		if strings.HasPrefix(tc.path, "/extensions/") && tc.code == 200 {
+			wantCache = "private, max-age=31536000, immutable"
+		}
+		if strings.HasPrefix(tc.path, "/extensions/") && w.Header().Get("Cache-Control") != wantCache {
+			t.Fatalf("%s: asset cache policy %q", tc.path, w.Header().Get("Cache-Control"))
 		}
 	}
 	body, _ := json.Marshal(map[string]any{"enabled": []string{}, "revision": status.ConfigRevision})

@@ -325,6 +325,10 @@ func (s *serveServer) handleExtensionAsset(w http.ResponseWriter, r *http.Reques
 		t = "application/octet-stream"
 	}
 	w.Header().Set("Content-Type", t)
+	// The generation in the URL changes with any extension edit and an old
+	// generation gets 410, so a served asset never changes. Caching it keeps a
+	// Hub node switch from downloading every stylesheet, font and module again.
+	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
 	if r.Method == http.MethodGet {
 		_, _ = w.Write(data)
 	}
