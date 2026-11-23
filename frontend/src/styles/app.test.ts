@@ -42,6 +42,15 @@ describe('stylesheet manifest', () => {
   });
 });
 
+describe('page transitions', () => {
+  it('shows the destination at once under reduced motion, even if startup stalls', () => {
+    const css = readFileSync(resolve(stylesRoot, 'base/shell.css'), 'utf8');
+    expect(css).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)\s*\{\s*\.workspace-notice-spinner,\s*::view-transition-new\(root\)\s*\{\s*animation: none;/,
+    );
+  });
+});
+
 describe('panel splitter styles', () => {
   it('keeps a 6px grab area but paints only a 1px edge indicator', () => {
     expect(appCSS).toMatch(/\.panel-resize-handle\s*\{[^}]*width: 6px;/);

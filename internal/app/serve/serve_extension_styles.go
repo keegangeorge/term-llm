@@ -13,13 +13,14 @@ import (
 )
 
 // serveIndexHTML serves the SPA shell. Authorized, non-safe-mode documents link
-// the enabled extension stylesheets and icon sprites in <head> so they apply before
-// first paint; frontend/src/api/extensions.ts adopts them instead of adding copies.
+// the enabled extension stylesheets, icon sprites and script hint in <head>.
+// Styles and icons apply before first paint; the hint delays the page reveal
+// until enabled scripts have activated (frontend/src/api/extensions.ts).
 func (s *serveServer) serveIndexHTML(w http.ResponseWriter, r *http.Request) {
 	const contentType, cacheControl = "text/html; charset=utf-8", "no-cache, no-store, must-revalidate"
 	page, links := linkeddevices.PeerIndexHTML(r, s.renderIndexHTML()), ""
 	if s.extensions != nil && r.URL.Query().Get("safe-mode") != "1" && s.requestAuthorized(r) {
-		links = s.extensions.manager.StylesheetLinks() + s.extensions.manager.IconMeta()
+		links = s.extensions.manager.StylesheetLinks() + s.extensions.manager.IconMeta() + s.extensions.manager.ScriptMeta()
 	}
 	if links == "" || !bytes.Contains(page, []byte("</head>")) {
 		serveEmbeddedUIBytes(w, r, page, contentType, cacheControl, false)

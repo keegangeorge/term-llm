@@ -44,16 +44,42 @@ describe('bootstrap configuration and storage', () => {
   it('shares sidebar geometry across Hub nodes', () => {
     localStorage.clear();
     const hub = { nodeId: 'n1', nodeBasePath: '/nodes/n1' };
-    expect(storageKeys(hub).sidebarWidth).toBe('term_llm_sidebar_width');
-    expect(storageKeys(hub).sidebarCollapsed).toBe('term_llm_sidebar_collapsed');
+    const otherHub = { nodeId: 'n2', nodeBasePath: '/nodes/n2' };
+    const keys = storageKeys(hub);
+    expect(keys.sidebarWidth).toBe('term_llm_sidebar_width');
+    expect(keys.sidebarCollapsed).toBe('term_llm_sidebar_collapsed');
 
     // The first node to load keeps its old per-node layout as the shared one.
     localStorage.setItem('term_llm_sidebar_width:n1', '420');
+    localStorage.setItem('term_llm_sidebar_collapsed:n1', '1');
     localStorage.setItem('term_llm_sidebar_width:n2', '300');
+    localStorage.setItem('term_llm_sidebar_collapsed:n2', '1');
     migrateScopedStorage(localStorage, hub);
-    expect(localStorage.getItem('term_llm_sidebar_width')).toBe('420');
+    expect(localStorage.getItem(keys.sidebarWidth)).toBe('420');
+    expect(localStorage.getItem(keys.sidebarCollapsed)).toBe('1');
+    migrateScopedStorage(localStorage, otherHub);
+    expect(localStorage.getItem(keys.sidebarWidth)).toBe('420');
+
+    // Expanding and resetting remove the shared keys. Reloads of either node
+    // must keep those defaults rather than restore old per-node preferences.
+    localStorage.removeItem(keys.sidebarCollapsed);
+    localStorage.removeItem(keys.sidebarWidth);
+    migrateScopedStorage(localStorage, hub);
+    expect(localStorage.getItem(keys.sidebarCollapsed)).toBeNull();
+    expect(localStorage.getItem(keys.sidebarWidth)).toBeNull();
+    migrateScopedStorage(localStorage, otherHub);
+    expect(localStorage.getItem(keys.sidebarCollapsed)).toBeNull();
+    expect(localStorage.getItem(keys.sidebarWidth)).toBeNull();
+  });
+
+  it('keeps sidebar defaults if the first Hub node had no legacy geometry', () => {
+    localStorage.clear();
+    const keys = migrateScopedStorage(localStorage, { nodeId: 'n1', nodeBasePath: '/nodes/n1' });
+    localStorage.setItem('term_llm_sidebar_width:n2', '300');
+    localStorage.setItem('term_llm_sidebar_collapsed:n2', '1');
     migrateScopedStorage(localStorage, { nodeId: 'n2', nodeBasePath: '/nodes/n2' });
-    expect(localStorage.getItem('term_llm_sidebar_width')).toBe('420');
+    expect(localStorage.getItem(keys.sidebarWidth)).toBeNull();
+    expect(localStorage.getItem(keys.sidebarCollapsed)).toBeNull();
   });
 
   it('migrates unscoped preferences once without overwriting scoped values', () => {

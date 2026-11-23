@@ -66,6 +66,7 @@ export function storageKeys(hub: HubContext | null): StorageKeys {
 const NODE_ONLY: ReadonlySet<StorageName> = new Set(['token', 'webMCPSessions', 'webMCPDefault']);
 
 const LEGACY_ARCHIVED_SESSIONS_KEY = 'term_llm_show_hidden_sessions';
+const SIDEBAR_GEOMETRY_MIGRATED_KEY = 'term_llm_sidebar_geometry_migrated';
 
 function migrateArchivedSessionsPreference(storage: Storage, key: string, legacyKey: string): void {
   try {
@@ -93,15 +94,27 @@ export function migrateScopedStorage(storage: Storage, hub: HubContext | null): 
     LEGACY_ARCHIVED_SESSIONS_KEY,
   );
   if (!hub?.nodeId) return keys;
-  // Sidebar geometry used to be saved per node; the first node to load seeds
-  // the shared value so an existing layout is kept rather than reset.
-  for (const name of ['sidebarCollapsed', 'sidebarWidth'] as const) {
-    const legacy = storage.getItem(`${STORAGE_BASE_KEYS[name]}:${hub.nodeId}`);
-    if (legacy === null || storage.getItem(keys[name]) !== null) continue;
-    try {
-      storage.setItem(keys[name], legacy);
-    } catch {
-      // A full store must not block the Hub node from starting.
+  // Sidebar geometry used to be saved per node; only the first node to load
+  // seeds the shared values. An absent shared key can also mean an explicit
+  // expand/reset, so never import another node's legacy value after that.
+  if (storage.getItem(SIDEBAR_GEOMETRY_MIGRATED_KEY) === null) {
+    let migrated = true;
+    for (const name of ['sidebarCollapsed', 'sidebarWidth'] as const) {
+      const legacy = storage.getItem(`${STORAGE_BASE_KEYS[name]}:${hub.nodeId}`);
+      if (legacy === null || storage.getItem(keys[name]) !== null) continue;
+      try {
+        storage.setItem(keys[name], legacy);
+      } catch {
+        migrated = false;
+        // A full store must not block the Hub node from starting.
+      }
+    }
+    if (migrated) {
+      try {
+        storage.setItem(SIDEBAR_GEOMETRY_MIGRATED_KEY, '1');
+      } catch {
+        // Retry migration on the next load if storage becomes available.
+      }
     }
   }
   for (const [name, base] of Object.entries(STORAGE_BASE_KEYS) as Array<[StorageName, string]>) {

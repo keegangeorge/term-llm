@@ -28,6 +28,23 @@ func (m *Manager) StylesheetLinks() string {
 	return links.String()
 }
 
+// ScriptMeta announces that a server-enabled script may restyle the page after
+// the first paint. JS-only extensions have no stylesheet or icon hint in head.
+func (m *Manager) ScriptMeta() string {
+	s := m.Status()
+	if s.Disabled || s.Generation == "" {
+		return ""
+	}
+	for _, id := range s.Enabled {
+		for _, entry := range s.Entries {
+			if entry.ID == id && entry.Error == "" && entry.JS != "" {
+				return `<meta name="term-llm-extension-scripts">`
+			}
+		}
+	}
+	return ""
+}
+
 func escapePath(p string) string {
 	segments := strings.Split(p, "/")
 	for i, segment := range segments {

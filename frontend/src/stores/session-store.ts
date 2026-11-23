@@ -11,7 +11,7 @@ import type { Modal, HubAgent } from './store-types';
 import type { AppStoreServices } from './app-store-services';
 import { SavedOrder, type OrderEntry, type OrderRanks } from './saved-order';
 import { mergeSeenState } from '../domain/attention-seen';
-import { readHubAgents, writeHubAgents } from '../platform/hub-agent-cache';
+import { hubAgentCacheVersion, readHubAgents, writeHubAgents } from '../platform/hub-agent-cache';
 import {
   array,
   compareProjects,
@@ -1252,7 +1252,7 @@ export class SessionStore {
   }
 
   async refreshHubAgents(force = false): Promise<void> {
-    if (this.disposed) return;
+    if (this.disposed || this.services.authRequired.peek()) return;
     if (this.hubAgentFetch) return this.hubAgentFetch;
     if (document.visibilityState === 'hidden') {
       window.clearTimeout(this.hubAgentRefreshTimer);
@@ -1274,6 +1274,7 @@ export class SessionStore {
     this.hubAgentRefreshTimer = 0;
     this.hubAgentLastFetch = Date.now();
     const orderVersion = this.hubAgentOrderVersion;
+    const cacheVersion = hubAgentCacheVersion();
     const controller = new AbortController();
     this.hubAgentAbort = controller;
     let refreshDelay = 10_000;
@@ -1281,7 +1282,14 @@ export class SessionStore {
     const request = (async () => {
       try {
         const data = await this.services.endpoints.hubNodes(url, controller.signal);
-        if (this.disposed) return;
+        if (
+          this.disposed ||
+          this.services.authRequired.peek() ||
+          hubAgentCacheVersion() !== cacheVersion
+        ) {
+          refreshAgain = false;
+          return;
+        }
         // While the Hub's background health cache warms, retry quickly without
         // showing unknown nodes or waiting behind slow offline probes.
         if (array(data.nodes).some((node) => recordValue(node.status)?.state === 'unknown'))
@@ -1338,7 +1346,13 @@ export class SessionStore {
     this.hubAgentFetch = request.finally(() => {
       this.hubAgentFetch = null;
       this.hubAgentAbort = null;
-      if (!this.disposed && refreshAgain && document.visibilityState !== 'hidden')
+      if (
+        !this.disposed &&
+        !this.services.authRequired.peek() &&
+        hubAgentCacheVersion() === cacheVersion &&
+        refreshAgain &&
+        document.visibilityState !== 'hidden'
+      )
         this.scheduleHubAgentRefresh(refreshDelay);
     });
     return this.hubAgentFetch;

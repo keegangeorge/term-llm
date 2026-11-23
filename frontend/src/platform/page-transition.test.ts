@@ -1,9 +1,15 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { pageTransitionReady, revealAfterPageTransition } from './page-transition';
+import {
+  pageTransitionReady,
+  revealAfterPageTransition,
+  watchPageTransitionReveal,
+} from './page-transition';
+import { extensionsExpected } from '../api/extensions';
 
 afterEach(() => {
   vi.unstubAllGlobals();
   Reflect.deleteProperty(document, 'getAnimations');
+  document.head.querySelector('meta[name="term-llm-extension-scripts"]')?.remove();
 });
 
 function stubFrames() {
@@ -50,6 +56,29 @@ it('reveals at once for reduced motion', () => {
   revealAfterPageTransition();
   expect(held.finish).toHaveBeenCalled();
   expect(held.updatePlaybackRate).not.toHaveBeenCalled();
+});
+
+it('reveals again when a ready page returns from the back-forward cache', () => {
+  stubFrames();
+  const held = heldAnimation('::view-transition-new(root)');
+  Object.assign(document, { getAnimations: () => [held] });
+  const stop = watchPageTransitionReveal();
+  expect(held.updatePlaybackRate).toHaveBeenCalledTimes(1);
+  held.updatePlaybackRate.mockClear();
+  window.dispatchEvent(new Event('pagereveal'));
+  expect(held.updatePlaybackRate).toHaveBeenCalledTimes(1);
+  stop();
+  held.updatePlaybackRate.mockClear();
+  window.dispatchEvent(new Event('pagereveal'));
+  expect(held.updatePlaybackRate).not.toHaveBeenCalled();
+});
+
+it('waits for a JS-only extension announced by the server', () => {
+  expect(extensionsExpected()).toBe(false);
+  const hint = document.createElement('meta');
+  hint.name = 'term-llm-extension-scripts';
+  document.head.append(hint);
+  expect(extensionsExpected()).toBe(true);
 });
 
 it('reveals the workspace only once a theme extension has restyled it', () => {

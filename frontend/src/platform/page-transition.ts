@@ -11,7 +11,7 @@ export interface PageReadiness {
   workspaceVisible: boolean;
   authRequired: boolean;
   startupFailed: boolean;
-  /** The server rendered extension styles, so extension scripts will restyle the page. */
+  /** The server rendered extension styles, icons or script hint. */
   extensionsExpected: boolean;
   /** Every enabled extension has activated or failed (or safe mode skipped them). */
   extensionsSettled: boolean;
@@ -38,6 +38,16 @@ function heldNewPage(): Animation[] {
     const effect = animation.effect as KeyframeEffect | null;
     return effect?.pseudoElement === NEW_PAGE;
   });
+}
+
+export function watchPageTransitionReveal(): () => void {
+  // A restored back-forward-cache document keeps its mounted App and its ready
+  // state. Its next cross-document transition arrives via pagereveal, not a
+  // Preact render, so reveal that new transition too.
+  const reveal = () => revealAfterPageTransition();
+  reveal();
+  window.addEventListener('pagereveal', reveal);
+  return () => window.removeEventListener('pagereveal', reveal);
 }
 
 export function revealAfterPageTransition(): void {

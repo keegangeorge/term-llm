@@ -16,7 +16,7 @@ import { LightboxLoader } from '../components/LightboxLoader';
 import { Icon } from '../components/Icon';
 import { useMediaQuery } from '../components/useMediaQuery';
 import { installVisualViewportSizing } from '../platform/browser';
-import { pageTransitionReady, revealAfterPageTransition } from '../platform/page-transition';
+import { pageTransitionReady, watchPageTransitionReveal } from '../platform/page-transition';
 import { extensionsExpected } from '../api/extensions';
 import { extensionRuntime } from '../stores/extension-runtime';
 
@@ -232,7 +232,7 @@ export function App({ store }: { store: AppStore }) {
     extensionsSettled: extensionRuntime.settled.value || extensionRuntime.safeMode.value,
   });
   useEffect(() => {
-    if (pageReady) revealAfterPageTransition();
+    if (pageReady) return watchPageTransitionReveal();
   }, [pageReady]);
   useEffect(() => {
     if (

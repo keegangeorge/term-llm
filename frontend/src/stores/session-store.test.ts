@@ -128,6 +128,30 @@ describe('chat Hub agent ordering', () => {
     }
   });
 
+  it.each(['authRequired', 'clear local cache', 'other tab clear'])(
+    'does not repopulate agents from a read after %s',
+    async (event) => {
+      const store = new AppStore(hubConfig);
+      const listing = deferred<ReturnType<typeof hubListing>>();
+      try {
+        store.endpoints.hubNodes = vi.fn(() => listing.promise);
+        const pending = store.refreshHubAgents(true);
+        if (event === 'authRequired') store.authRequired.value = true;
+        else if (event === 'clear local cache') await store.clearLocalCache();
+        else {
+          // Another tab changes the origin marker but cannot remove this tab's storage.
+          localStorage.setItem('term_llm_hub_agents_invalidation', 'other-tab-clear');
+        }
+        listing.resolve(hubListing('private'));
+        await pending;
+        expect(agentIds(store)).toEqual([]);
+        expect(sessionStorage.getItem('term_llm_hub_agents:/hub/')).toBeNull();
+      } finally {
+        store.dispose();
+      }
+    },
+  );
+
   it('forgets the cached Hub list when the Hub rejects the read', async () => {
     const store = new AppStore(hubConfig);
     try {

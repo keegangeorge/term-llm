@@ -134,7 +134,8 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .workspace-notice-spinner {
+  .workspace-notice-spinner,
+  ::view-transition-new(root) {
     animation: none;
   }
 }

@@ -10,7 +10,28 @@ const agent = (id: string, attention = false) => ({
   attention,
 });
 
-beforeEach(() => sessionStorage.clear());
+beforeEach(() => {
+  sessionStorage.clear();
+  localStorage.clear();
+});
+
+it('invalidates another tab’s cached list on clear without removing unrelated data', async () => {
+  writeHubAgents('/hub/', [agent('private')]);
+  const otherTabCache = sessionStorage.getItem('term_llm_hub_agents:/hub/');
+  const otherTabVersion = sessionStorage.getItem('term_llm_hub_agents_invalidation');
+  await deletePersistentUICaches();
+
+  // Each tab owns its own sessionStorage; clearing here cannot delete that copy.
+  sessionStorage.setItem('term_llm_hub_agents:/hub/', otherTabCache!);
+  if (otherTabVersion === null) sessionStorage.removeItem('term_llm_hub_agents_invalidation');
+  else sessionStorage.setItem('term_llm_hub_agents_invalidation', otherTabVersion);
+  sessionStorage.setItem('unrelated', 'kept');
+  expect(readHubAgents('/hub/')).toEqual([]);
+  expect(sessionStorage.getItem('term_llm_hub_agents:/hub/')).toBeNull();
+  expect(sessionStorage.getItem('unrelated')).toBe('kept');
+  writeHubAgents('/hub/', [agent('new')]);
+  expect(readHubAgents('/hub/').map((entry) => entry.id)).toEqual(['new']);
+});
 
 it('keeps one list per Hub and clears all of them', () => {
   writeHubAgents('/hub/', [agent('a')]);

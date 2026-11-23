@@ -78,9 +78,19 @@ function adoptRenderedStyle(
   return index < 0 ? null : rendered.splice(index, 1)[0];
 }
 
-/** True when the server rendered extension styles, so extension JS will restyle the page. */
+// The server also hints when enabled scripts (including JS-only themes) will
+// change the page after startup. The marker has no asset URL to preload.
+function renderedExtensionScripts(): boolean {
+  return document.head.querySelector('meta[name="term-llm-extension-scripts"]') !== null;
+}
+
+/** True when enabled extensions can restyle the page during activation. */
 export function extensionsExpected(): boolean {
-  return renderedExtensionStyles().length > 0 || renderedExtensionIcons().length > 0;
+  return (
+    renderedExtensionStyles().length > 0 ||
+    renderedExtensionIcons().length > 0 ||
+    renderedExtensionScripts()
+  );
 }
 
 export async function loadExtensions(store: AppStore): Promise<void> {

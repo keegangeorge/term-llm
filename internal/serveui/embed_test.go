@@ -222,7 +222,9 @@ func TestProductionBundleSizeBudgets(t *testing.T) {
 		// delay the reconnecting notice and finish the cross-document view
 		// transition once the workspace paints: +2.26/+0.84 kB over a 537.98/
 		// 158.93 kB build, measuring 540.24/159.77 kB. Allow that and no more.
-		"dist/app.js":           {raw: 540_300, gzip: 159_800},
+		// Restored-page reveal, JS-only extension hints and cache invalidation
+		// bring the entry to 541.11/160.06 kB. Keep narrow headroom.
+		"dist/app.js":           {raw: 541_200, gzip: 160_100},
 		"dist/chunks/Panels.js": {raw: 32_000, gzip: 11_000},
 		// Panel splitting adds a shared-import edge to Lightbox: measured 8.03/3.21 kB.
 		// Pausing transcript media while a video is open brings it to 8.16/3.27 kB.

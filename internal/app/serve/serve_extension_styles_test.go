@@ -99,6 +99,36 @@ func TestIndexExtensionStylesheetsFollowReloads(t *testing.T) {
 	}
 }
 
+func TestIndexAnnouncesJSOnlyExtensions(t *testing.T) {
+	e := extensionFixture(t)
+	manifest := filepath.Join(e.manager.Status().Directory, "dracula", "extension.yaml")
+	if err := os.WriteFile(manifest, []byte("title: Dracula\nformat_version: 1\njs: main.js\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.reload(); err != nil {
+		t.Fatal(err)
+	}
+	s := &serveServer{cfg: serveServerConfig{ui: true, basePath: "/chat", requireAuth: true, token: "secret"}, extensions: e}
+	for _, tc := range []struct {
+		url        string
+		authorized bool
+		want       bool
+	}{
+		{"/", true, true},
+		{"/", false, false},
+		{"/?safe-mode=1", true, false},
+	} {
+		body := extensionShell(t, s, tc.url, tc.authorized)
+		head := body[:strings.Index(body, "</head>")]
+		if strings.Contains(head, `<meta name="term-llm-extension-scripts">`) != tc.want {
+			t.Errorf("%s authorized=%t: JS hint presence does not match %t", tc.url, tc.authorized, tc.want)
+		}
+		if strings.Contains(head, `data-extension="dracula"`) {
+			t.Errorf("%s authorized=%t: JS-only extension rendered CSS or icons", tc.url, tc.authorized)
+		}
+	}
+}
+
 func TestIndexAnnouncesExtensionIconSprites(t *testing.T) {
 	e := extensionFixture(t)
 	root := filepath.Join(e.manager.Status().Directory, "dracula")
