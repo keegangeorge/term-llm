@@ -218,7 +218,11 @@ func TestProductionBundleSizeBudgets(t *testing.T) {
 		// Turning widgets off in Settings adds an endpoint, a store action and
 		// the launcher's list of widgets that are on (the switches load with
 		// Settings): measured 539.23/158.90 kB. Allow 300 raw/100 gzip bytes more.
-		"dist/app.js":           {raw: 539_300, gzip: 158_950},
+		// Smooth Hub node switches keep the last agent list for the next page,
+		// delay the reconnecting notice and finish the cross-document view
+		// transition once the workspace paints: +2.26/+0.84 kB over a 537.98/
+		// 158.93 kB build, measuring 540.24/159.77 kB. Allow that and no more.
+		"dist/app.js":           {raw: 540_300, gzip: 159_800},
 		"dist/chunks/Panels.js": {raw: 32_000, gzip: 11_000},
 		// Panel splitting adds a shared-import edge to Lightbox: measured 8.03/3.21 kB.
 		// Pausing transcript media while a video is open brings it to 8.16/3.27 kB.
@@ -254,7 +258,8 @@ func TestProductionBundleSizeBudgets(t *testing.T) {
 		// Ordered-list marker clearance plus the sidebar's unsent-draft rows,
 		// New chat draft dot and toast action button measure 179.95/35.02 kB.
 		// Retain the draft feature's bounded raw and gzip headroom.
-		"dist/app.css": {raw: 181_500, gzip: 35_250},
+		// The Hub node-switch view transition rules measure 181.45/35.32 kB.
+		"dist/app.css": {raw: 181_500, gzip: 35_350},
 		// Measured after the completed standalone port: 67.7/21.5 KiB JS and
 		// 16.7/4.1 KiB CSS. These limits retain modest growth headroom without
 		// allowing chat-only rendering dependencies into the Hub graph. The

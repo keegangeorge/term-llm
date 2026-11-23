@@ -15,6 +15,42 @@
     visibility 180ms ease;
 }
 
+/*
+ * Same-origin page loads (switching Hub nodes) keep the previous page on
+ * screen while the next one boots, then crossfade. The new page is live in
+ * ::view-transition-new and held transparent; revealAfterPageTransition()
+ * fades it in once the workspace paints. The hold's own fade at the end is
+ * only the fallback for a slow or failed startup.
+ */
+@view-transition {
+  navigation: auto;
+}
+
+::view-transition-old(root),
+::view-transition-new(root) {
+  /* The default plus-lighter blend over-brightens a fade over an opaque layer. */
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  animation: none;
+}
+
+::view-transition-new(root) {
+  animation: page-transition-hold 1.5s linear both;
+}
+
+@keyframes page-transition-hold {
+  0%,
+  85% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
 .startup-splash.hidden {
   opacity: 0;
   visibility: hidden;

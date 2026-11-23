@@ -5,7 +5,10 @@ import { AppStore } from './app-store';
 import { testConfig, testSession } from './store-test-fixtures';
 import { compareSessionsByActivity } from './store-utils';
 
-beforeEach(() => localStorage.clear());
+beforeEach(() => {
+  localStorage.clear();
+  sessionStorage.clear();
+});
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -70,6 +73,78 @@ describe('sidebar width preference', () => {
 });
 
 describe('chat Hub agent ordering', () => {
+  it('paints the last Hub list at once on the next node, with attention relative to it', async () => {
+    const first = new AppStore(hubConfig);
+    try {
+      first.endpoints.hubNodes = vi.fn(async () => ({
+        nodes: ['current', 'beta'].map((id) => ({
+          ...hubNode(id),
+          sessions: { resume_path: `/hub/node/${id}/`, unseen_count: 1 },
+        })),
+      }));
+      await first.refreshHubAgents(true);
+      expect(first.hubAgents.value.map((agent) => agent.attention)).toEqual([false, true]);
+    } finally {
+      first.dispose();
+    }
+    // Switching to beta loads a new page; its list is there before any request.
+    const next = new AppStore({ ...hubConfig, hub: { ...hubConfig.hub, nodeId: 'beta' } });
+    try {
+      expect(agentIds(next)).toEqual(['current', 'beta']);
+      // The node on screen never shows its own dot; the previous node's dot
+      // waits for the Hub because that node never recorded its own unseen state.
+      expect(next.hubAgents.value.map((agent) => agent.attention)).toEqual([false, false]);
+    } finally {
+      next.dispose();
+    }
+  });
+
+  it('ignores a cached Hub list with unsafe targets', () => {
+    sessionStorage.setItem(
+      'term_llm_hub_agents:/hub/',
+      JSON.stringify([
+        { id: 'evil', name: 'Evil', target: '//evil.example/' },
+        { id: 'ok', name: 'Ok', target: '/hub/node/ok/' },
+      ]),
+    );
+    const store = new AppStore(hubConfig);
+    try {
+      expect(agentIds(store)).toEqual(['ok']);
+    } finally {
+      store.dispose();
+    }
+  });
+
+  it('forgets the cached Hub list when this node needs sign-in', async () => {
+    const store = new AppStore(hubConfig);
+    try {
+      store.endpoints.hubNodes = vi.fn(async () => hubListing('alpha'));
+      await store.refreshHubAgents(true);
+      expect(sessionStorage.getItem('term_llm_hub_agents:/hub/')).not.toBeNull();
+      store.authRequired.value = true;
+      expect(sessionStorage.getItem('term_llm_hub_agents:/hub/')).toBeNull();
+    } finally {
+      store.dispose();
+    }
+  });
+
+  it('forgets the cached Hub list when the Hub rejects the read', async () => {
+    const store = new AppStore(hubConfig);
+    try {
+      store.endpoints.hubNodes = vi.fn(async () => hubListing('alpha'));
+      await store.refreshHubAgents(true);
+      expect(sessionStorage.getItem('term_llm_hub_agents:/hub/')).not.toBeNull();
+      store.endpoints.hubNodes = vi.fn(async () => {
+        throw new APIError('Forbidden', 403);
+      });
+      await store.refreshHubAgents(true);
+      expect(agentIds(store)).toEqual([]);
+      expect(sessionStorage.getItem('term_llm_hub_agents:/hub/')).toBeNull();
+    } finally {
+      store.dispose();
+    }
+  });
+
   it('keeps the Hub GET order rather than sorting names and excludes unreachable nodes', async () => {
     const store = new AppStore(hubConfig);
     try {

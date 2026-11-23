@@ -38,13 +38,23 @@ export const STORAGE_BASE_KEYS = {
 export type StorageName = keyof typeof STORAGE_BASE_KEYS;
 export type StorageKeys = Record<StorageName, string>;
 
+/**
+ * Browser-wide choices. Sidebar geometry is shared so switching Hub nodes
+ * keeps the layout still instead of jumping to another node's saved width.
+ */
+const BROWSER_WIDE: ReadonlySet<StorageName> = new Set([
+  'thinkingDisplay',
+  'sidebarCollapsed',
+  'sidebarWidth',
+]);
+
 export function storageKeys(hub: HubContext | null): StorageKeys {
   const scope = hub?.nodeId ? `:${hub.nodeId}` : '';
   return Object.fromEntries(
-    Object.entries(STORAGE_BASE_KEYS).map(([name, key]) => {
-      // Thinking is browser-wide. Direct node auth also keeps its unscoped token.
+    (Object.entries(STORAGE_BASE_KEYS) as Array<[StorageName, string]>).map(([name, key]) => {
+      // Direct node auth also keeps its unscoped token.
       const scoped =
-        name === 'thinkingDisplay' || (name === 'token' && hub && !hub.nodeBasePath)
+        BROWSER_WIDE.has(name) || (name === 'token' && hub && !hub.nodeBasePath)
           ? key
           : `${key}${scope}`;
       return [name, scoped];
@@ -83,6 +93,17 @@ export function migrateScopedStorage(storage: Storage, hub: HubContext | null): 
     LEGACY_ARCHIVED_SESSIONS_KEY,
   );
   if (!hub?.nodeId) return keys;
+  // Sidebar geometry used to be saved per node; the first node to load seeds
+  // the shared value so an existing layout is kept rather than reset.
+  for (const name of ['sidebarCollapsed', 'sidebarWidth'] as const) {
+    const legacy = storage.getItem(`${STORAGE_BASE_KEYS[name]}:${hub.nodeId}`);
+    if (legacy === null || storage.getItem(keys[name]) !== null) continue;
+    try {
+      storage.setItem(keys[name], legacy);
+    } catch {
+      // A full store must not block the Hub node from starting.
+    }
+  }
   for (const [name, base] of Object.entries(STORAGE_BASE_KEYS) as Array<[StorageName, string]>) {
     if (NODE_ONLY.has(name) || keys[name] === base || storage.getItem(keys[name]) !== null)
       continue;

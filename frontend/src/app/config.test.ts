@@ -41,6 +41,21 @@ describe('bootstrap configuration and storage', () => {
     );
   });
 
+  it('shares sidebar geometry across Hub nodes', () => {
+    localStorage.clear();
+    const hub = { nodeId: 'n1', nodeBasePath: '/nodes/n1' };
+    expect(storageKeys(hub).sidebarWidth).toBe('term_llm_sidebar_width');
+    expect(storageKeys(hub).sidebarCollapsed).toBe('term_llm_sidebar_collapsed');
+
+    // The first node to load keeps its old per-node layout as the shared one.
+    localStorage.setItem('term_llm_sidebar_width:n1', '420');
+    localStorage.setItem('term_llm_sidebar_width:n2', '300');
+    migrateScopedStorage(localStorage, hub);
+    expect(localStorage.getItem('term_llm_sidebar_width')).toBe('420');
+    migrateScopedStorage(localStorage, { nodeId: 'n2', nodeBasePath: '/nodes/n2' });
+    expect(localStorage.getItem('term_llm_sidebar_width')).toBe('420');
+  });
+
   it('migrates unscoped preferences once without overwriting scoped values', () => {
     localStorage.setItem('term_llm_active_session', 'old');
     const keys = migrateScopedStorage(localStorage, { nodeId: 'n1', nodeBasePath: '/nodes/n1' });

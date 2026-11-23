@@ -78,7 +78,20 @@ function adoptRenderedStyle(
   return index < 0 ? null : rendered.splice(index, 1)[0];
 }
 
+/** True when the server rendered extension styles, so extension JS will restyle the page. */
+export function extensionsExpected(): boolean {
+  return renderedExtensionStyles().length > 0 || renderedExtensionIcons().length > 0;
+}
+
 export async function loadExtensions(store: AppStore): Promise<void> {
+  try {
+    await loadExtensionsOnce(store);
+  } finally {
+    extensionRuntime.settled.value = true;
+  }
+}
+
+async function loadExtensionsOnce(store: AppStore): Promise<void> {
   if (extensionRuntime.safeMode.peek()) {
     removeRenderedExtensions();
     return;

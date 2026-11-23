@@ -46,6 +46,7 @@ import { type TabEventType } from '../platform/tab-sync';
 import type { StreamSupervisor } from './stream-supervisor';
 import { AppStoreServices, type StartupMetrics, type StoreDiagnostics } from './app-store-services';
 import { deletePersistentUICaches, type PersistentCache } from '../platform/persistent-cache';
+import { clearHubAgents } from '../platform/hub-agent-cache';
 import { restoredSession, type StartupSnapshot } from './workspace-cache';
 import type { SessionLoadOutcome } from './selection-store';
 import { RuntimeStore } from './runtime-store';
@@ -747,9 +748,15 @@ export class AppStore {
 
   /**
    * Persists the verified selected conversation (debounced, bounded) and drops
-   * this scope's private cache whenever the server rejects our credential.
+   * this scope's private cache, and this tab's Hub agent list, whenever the
+   * server rejects our credential.
    */
   private installWorkspacePersistence(): void {
+    this.disposeEffects.push(
+      effect(() => {
+        if (this.authRequired.value) clearHubAgents();
+      }),
+    );
     const cache = this.services.workspaceCache;
     if (!cache.enabled) return;
     this.disposeEffects.push(

@@ -34,6 +34,8 @@ export const extensionRuntime = {
   loaded: signal<string[]>([]),
   generation: signal(''),
   errors: signal<string[]>([]),
+  /** The first load finished: every enabled extension activated or failed. */
+  settled: signal(false),
 };
 let recoveryKey = '';
 export function initializeExtensionRecovery(config: AppConfig): boolean {

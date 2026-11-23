@@ -16,6 +16,9 @@ import { LightboxLoader } from '../components/LightboxLoader';
 import { Icon } from '../components/Icon';
 import { useMediaQuery } from '../components/useMediaQuery';
 import { installVisualViewportSizing } from '../platform/browser';
+import { pageTransitionReady, revealAfterPageTransition } from '../platform/page-transition';
+import { extensionsExpected } from '../api/extensions';
+import { extensionRuntime } from '../stores/extension-runtime';
 
 const ConnectionGate = lazyComponent<{ store: AppStore }>(
   () =>
@@ -35,6 +38,8 @@ const ConnectionGate = lazyComponent<{ store: AppStore }>(
     <div class="startup-card">Loading sign-in…</div>
   </div>,
 );
+
+const CACHED_NOTICE_DELAY_MS = 1_000;
 
 const toastIcon = (kind: Toast['kind']) =>
   kind === 'success' ? 'check' : kind === 'error' ? 'alert-circle' : 'info';
@@ -130,7 +135,19 @@ function ShellOverlayLoader({ store }: { store: AppStore }) {
  */
 export function WorkspaceNotice({ store }: { store: AppStore }) {
   const notice = store.workspaceNotice.value;
-  if (!notice) return null;
+  // Reconnecting usually settles within moments (switching Hub nodes, a
+  // reload). Showing the notice at once only to remove it shifts the whole
+  // workspace twice; sending stays blocked until startup is done either way.
+  const [reconnectingSlow, setReconnectingSlow] = useState(false);
+  useEffect(() => {
+    if (notice !== 'cached') {
+      setReconnectingSlow(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setReconnectingSlow(true), CACHED_NOTICE_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+  if (!notice || (notice === 'cached' && !reconnectingSlow)) return null;
   const retry =
     notice === 'offline'
       ? () => void store.bootstrap()
@@ -202,6 +219,21 @@ export function App({ store }: { store: AppStore }) {
   // A restored last-known workspace renders before startup is authoritative;
   // WorkspaceNotice marks it and sending stays blocked until startupDone.
   const workspaceVisible = store.startupDone.value || store.workspaceShown.value;
+  // A Hub node switch is a full page load; finish its crossfade once there is
+  // something real to show (the workspace, sign-in, or a startup error). A
+  // theme extension restyles the page when its script activates, so wait for
+  // that too; the CSS hold in shell.css still caps the wait.
+  const [themeExpected] = useState(extensionsExpected);
+  const pageReady = pageTransitionReady({
+    workspaceVisible,
+    authRequired: store.authRequired.value,
+    startupFailed: store.startupFailed.value,
+    extensionsExpected: themeExpected,
+    extensionsSettled: extensionRuntime.settled.value || extensionRuntime.safeMode.value,
+  });
+  useEffect(() => {
+    if (pageReady) revealAfterPageTransition();
+  }, [pageReady]);
   useEffect(() => {
     if (
       shellVisible &&

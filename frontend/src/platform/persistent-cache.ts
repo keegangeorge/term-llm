@@ -8,6 +8,8 @@
  * no longer parses is simply discarded.
  */
 
+import { clearHubAgents } from './hub-agent-cache';
+
 const DATABASE = 'term_llm_ui_cache';
 const STORE = 'records';
 const VERSION = 1;
@@ -342,6 +344,7 @@ export class MemoryBackend implements CacheBackend {
 
 /** Deletes every persisted UI cache for this origin (Hub logout, "clear local cache"). */
 export async function deletePersistentUICaches(): Promise<void> {
+  clearHubAgents();
   if (!globalThis.indexedDB) return;
   // Release this page's connections first (backends reopen lazily afterwards)
   // so our own tab never blocks the delete.
