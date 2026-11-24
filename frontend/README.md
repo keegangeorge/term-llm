@@ -255,19 +255,19 @@ filters/details and narrow layouts. For external passkey browser coverage, see
 
 ## Static caching and deployments
 
-| URL class                                              | HTTP Cache-Control                     | Chat service worker                                             |
-| ------------------------------------------------------ | -------------------------------------- | --------------------------------------------------------------- |
-| Manifest-listed hashed chat dist assets (any query)    | `public, max-age=31536000, immutable`  | Cache-first in scope-specific `term-llm-assets-*`               |
-| Icon/web manifest with exact current `?v=`             | `public, max-age=31536000, immutable`  | Stale-while-revalidate in version-scoped shell cache            |
-| Other embedded non-hashed assets with exact chat `?v=` | `public, max-age=31536000, immutable`  | Network-first for scripts/styles/images/fonts; otherwise bypass |
-| Other non-hashed assets; missing/mismatched `?v=`      | `no-cache` + ETag                      | Scripts/styles/images/fonts network-first, otherwise bypass     |
-| `sw.js` (any query)                                    | `no-cache` + ETag                      | Browser worker update handling                                  |
-| Chat navigation/`index.html` (any query)               | `no-cache, no-store, must-revalidate`  | Bypass: authoritative network shell                             |
-| Hub JS/CSS with exact Hub `?v=`                        | `public, max-age=31536000, immutable`  | Bypass                                                          |
-| Hub JS/CSS without exact Hub version                   | `no-cache` + ETag                      | Bypass                                                          |
-| Hub shell                                              | `no-store`                             | Bypass                                                          |
-| Extension assets under the current generation          | `private, no-cache` + ETag             | Bypass                                                          |
-| APIs, auth, extension status                           | Existing policies, unchanged           | Bypass                                                          |
+| URL class                                              | HTTP Cache-Control                    | Chat service worker                                             |
+| ------------------------------------------------------ | ------------------------------------- | --------------------------------------------------------------- |
+| Manifest-listed hashed chat dist assets (any query)    | `public, max-age=31536000, immutable` | Cache-first in scope-specific `term-llm-assets-*`               |
+| Icon/web manifest with exact current `?v=`             | `public, max-age=31536000, immutable` | Stale-while-revalidate in version-scoped shell cache            |
+| Other embedded non-hashed assets with exact chat `?v=` | `public, max-age=31536000, immutable` | Network-first for scripts/styles/images/fonts; otherwise bypass |
+| Other non-hashed assets; missing/mismatched `?v=`      | `no-cache` + ETag                     | Scripts/styles/images/fonts network-first, otherwise bypass     |
+| `sw.js` (any query)                                    | `no-cache` + ETag                     | Browser worker update handling                                  |
+| Chat navigation/`index.html` (any query)               | `no-cache, no-store, must-revalidate` | Bypass: authoritative network shell                             |
+| Hub JS/CSS with exact Hub `?v=`                        | `public, max-age=31536000, immutable` | Bypass                                                          |
+| Hub JS/CSS without exact Hub version                   | `no-cache` + ETag                     | Bypass                                                          |
+| Hub shell                                              | `no-store`                            | Bypass                                                          |
+| Extension assets under the current generation          | `private, no-cache` + ETag            | Bypass                                                          |
+| APIs, auth, extension status                           | Existing policies, unchanged          | Bypass                                                          |
 
 Immutable is safe because each chat URL identifies build content, including its
 hashed dependency references. All imports/preloads belong to one build graph;
