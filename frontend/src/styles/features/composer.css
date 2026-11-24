@@ -416,6 +416,10 @@
   cursor: pointer;
 }
 
+.slash-command-option.with-badge {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
 .slash-command-option:hover,
 .slash-command-option.selected {
   background: var(--surface-2);

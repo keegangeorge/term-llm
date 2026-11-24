@@ -2872,6 +2872,7 @@ func (s *serveServer) handleModels(w http.ResponseWriter, r *http.Request) {
 		if defaultEffort := strings.TrimSpace(m.DefaultReasoningEffort); defaultEffort != "" && len(llm.ProviderReasoningEffortsForDiscovery(s.cfgRef, effectiveName, id, []string{defaultEffort})) > 0 {
 			item["default_reasoning_effort"] = defaultEffort
 		}
+		item["alias"] = llm.IsMovingModelAlias(s.cfgRef, effectiveName, id)
 		if len(m.ServiceTiers) > 0 {
 			item["service_tiers"] = append([]core.ModelServiceTier(nil), m.ServiceTiers...)
 		}

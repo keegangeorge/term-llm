@@ -11,6 +11,8 @@ export interface ModelOption {
   additional_speed_tiers?: string[];
   service_tier?: string;
   default_effort?: string;
+  /** Moving alias such as "opus" that follows its family's newest model. */
+  alias?: boolean;
   [key: string]: unknown;
 }
 

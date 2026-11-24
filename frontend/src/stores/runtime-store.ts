@@ -49,6 +49,7 @@ export class RuntimeStore {
    */
   readonly draftApprovalActions: ReadonlySignal<boolean | undefined>;
 
+  private readonly mentionRequests = new Map<string, Promise<void>>();
   private modelAbort: AbortController | null = null;
   private modelEpoch = 0;
 
@@ -271,20 +272,7 @@ export class RuntimeStore {
     }
     this.services.recordDiscovery({}, performance.now() - started);
     if (controller.signal.aborted || epoch !== this.modelEpoch) return;
-    const models = listFrom(data, 'data', 'models', 'items')
-      .map((entry) => ({
-        ...entry,
-        id: String(entry.id || entry.name || ''),
-        name: String(entry.display_name || entry.name || entry.id || ''),
-        provider: String(entry.provider || provider || ''),
-        efforts: Array.isArray(entry.reasoning_efforts)
-          ? entry.reasoning_efforts.map(String)
-          : Array.isArray(entry.efforts)
-            ? entry.efforts.map(String)
-            : undefined,
-        default_effort: String(entry.default_reasoning_effort || entry.default_effort || ''),
-      }))
-      .filter((entry) => entry.id) as RuntimeOption[];
+    const models = parseModelList(data, provider);
     batch(() => {
       this.modelCatalogs.value = { ...this.modelCatalogs.peek(), [provider]: models };
       // Settings previews intentionally load a non-selected provider into this
@@ -320,6 +308,48 @@ export class RuntimeStore {
         this.setPreference('effort', migratedEffort, false);
       }
     }
+  }
+
+  /**
+   * Loads every offered provider's catalog for composer model mentions. Each
+   * provider loads independently, so one slow or failing provider never
+   * blocks the others, and the /model picker's selection state is untouched.
+   */
+  loadMentionCatalogs(): Promise<void> {
+    const providers = this.providers.peek().map((entry) => entry.id);
+    return Promise.all(providers.map((provider) => this.loadMentionCatalog(provider))).then(
+      () => undefined,
+    );
+  }
+
+  private loadMentionCatalog(provider: string): Promise<void> {
+    const fetchedAt = this.catalogFetchedAt.get(provider);
+    if (
+      this.modelCatalogs.peek()[provider] &&
+      fetchedAt !== undefined &&
+      Date.now() - fetchedAt < MODEL_CATALOG_FRESH_MS
+    )
+      return Promise.resolve();
+    const pending = this.mentionRequests.get(provider);
+    if (pending) return pending;
+    const request = this.fetchMentionCatalog(provider)
+      .catch(() => undefined)
+      .finally(() => this.mentionRequests.delete(provider));
+    this.mentionRequests.set(provider, request);
+    return request;
+  }
+
+  private async fetchMentionCatalog(provider: string): Promise<void> {
+    const fingerprint = () =>
+      providerFingerprint(this.providers.peek().find((entry) => entry.id === provider));
+    const before = fingerprint();
+    const data = await this.services.endpoints.models(provider);
+    // A provider reconfigured mid-request must not inherit the old catalog.
+    if (fingerprint() !== before) return;
+    const models = parseModelList(data, provider);
+    this.modelCatalogs.value = { ...this.modelCatalogs.peek(), [provider]: models };
+    this.catalogFetchedAt.set(provider, Date.now());
+    if (this.providersVerified) this.services.workspaceCache.saveModels(provider, before, models);
   }
 
   setFast(value: boolean): void {
@@ -392,4 +422,22 @@ export class RuntimeStore {
     this.modelAbort = null;
     this.modelEpoch += 1;
   }
+}
+
+function parseModelList(data: Record<string, unknown>, provider: string): RuntimeOption[] {
+  return listFrom(data, 'data', 'models', 'items')
+    .map((entry) => ({
+      ...entry,
+      id: String(entry.id || entry.name || ''),
+      name: String(entry.display_name || entry.name || entry.id || ''),
+      provider: String(entry.provider || provider || ''),
+      alias: entry.alias === true,
+      efforts: Array.isArray(entry.reasoning_efforts)
+        ? entry.reasoning_efforts.map(String)
+        : Array.isArray(entry.efforts)
+          ? entry.efforts.map(String)
+          : undefined,
+      default_effort: String(entry.default_reasoning_effort || entry.default_effort || ''),
+    }))
+    .filter((entry) => entry.id) as RuntimeOption[];
 }

@@ -16,6 +16,11 @@ import {
   type MentionSearchResponse,
 } from '../domain/completions';
 import { attachmentIconName, validateAttachmentFile } from '../domain/attachments';
+import {
+  activeModelMentionAtCursor,
+  modelMentionCompletions,
+  modelMentionOwnsToken,
+} from '../domain/model-mentions';
 import type { Attachment } from '../domain/types';
 import { overlayManager } from '../platform/overlay-manager';
 import { VoiceOperation, type VoiceSnapshot } from '../platform/voice';
@@ -363,6 +368,7 @@ function ConversationComposer() {
     context: string;
     payload: MentionSearchResponse;
   } | null>(null);
+  const [modelCatalogsLoading, setModelCatalogsLoading] = useState(false);
   const addMenu = useMenuKeyboard(menu, () => setMenu(false), attach);
   useEffect(
     () =>
@@ -480,12 +486,33 @@ function ConversationComposer() {
   }, [voice, voiceState.phase, voiceState.generation]);
   const mention = activeMentionAtCursor(store.prompt.value, cursor);
   const inlineSlash = activeInlineSlashAtCursor(store.prompt.value, cursor);
+  const modelMention = activeModelMentionAtCursor(
+    store.prompt.value,
+    cursor,
+    store.providers.value,
+  );
+  const modelOwnsMention = modelMentionOwnsToken(modelMention);
+  const modelMentionActive = Boolean(modelMention);
+  // Providers can arrive after the mention opens on a cold start.
+  const mentionProviderKey = store.providers.value.map((entry) => entry.id).join('\u0000');
+  useEffect(() => {
+    if (!modelMentionActive) return;
+    let current = true;
+    setModelCatalogsLoading(true);
+    void store.runtime.loadMentionCatalogs().finally(() => {
+      if (current) setModelCatalogsLoading(false);
+    });
+    return () => {
+      current = false;
+    };
+  }, [store, modelMentionActive, mentionProviderKey]);
 
   // Mention results are revalidated in place: keep showing the previous
   // payload while the next search is pending so the menu does not flash.
   // Results are tagged with their search context so a project, worktree, or
   // session switch never offers paths from the previous one.
-  const mentionActive = Boolean(mention);
+  // A model mention is not a project path, so it never triggers file search.
+  const mentionActive = Boolean(mention) && !modelOwnsMention;
   const mentionContext = `${projectId}\u0000${worktreeDir}\u0000${session?.id || ''}`;
   useEffect(() => {
     if (!mentionActive) {
@@ -569,7 +596,28 @@ function ConversationComposer() {
   ).filter((entry) => commandAllowed(entry.value));
   const currentMentions =
     projectMentions?.context === mentionContext ? projectMentions.payload : null;
-  const combined = mention ? [...local, ...mentionCompletions(currentMentions, mention)] : local;
+  const modelCompletions = modelMention
+    ? modelMentionCompletions(
+        modelMention,
+        store.providers.value,
+        store.runtime.modelCatalogs.value,
+      )
+    : [];
+  if (modelOwnsMention && !modelCompletions.length)
+    modelCompletions.push({
+      value: '',
+      label: modelCatalogsLoading ? 'Loading models…' : 'No matching models',
+      description: modelCatalogsLoading
+        ? ''
+        : 'Only enabled providers and allowed models are listed',
+      kind: 'model',
+      unavailable: true,
+    });
+  const combined = modelOwnsMention
+    ? modelCompletions
+    : mention
+      ? [...local, ...modelCompletions, ...mentionCompletions(currentMentions, mention)]
+      : local;
   const completions =
     dismissed === `${store.prompt.value}\u0000${cursor}`
       ? []
@@ -606,6 +654,7 @@ function ConversationComposer() {
   );
 
   const choose = (completion: Completion) => {
+    if (completion.kind === 'model' && completion.unavailable) return;
     const nextCursor = completedCursor(store.prompt.value, completion);
     store.prompt.value = applyCompletion(store.prompt.value, completion);
     setCompletionIndex(-1);
@@ -1200,7 +1249,7 @@ function ConversationComposer() {
                   role="option"
                   aria-selected={activeIndex === index}
                   aria-disabled={entry.unavailable || undefined}
-                  class={`slash-command-option ${activeIndex === index ? 'selected' : ''}`}
+                  class={`slash-command-option${entry.badge ? ' with-badge' : ''}${activeIndex === index ? ' selected' : ''}`}
                   key={`${entry.kind}:${entry.value}`}
                   onMouseDown={(event) => {
                     event.preventDefault();
@@ -1222,7 +1271,9 @@ function ConversationComposer() {
                   <span class="slash-command-description">{entry.description}</span>
                   {entry.current ? (
                     <span class="slash-command-badge current">current</span>
-                  ) : entry.unavailable ? (
+                  ) : entry.badge ? (
+                    <span class="slash-command-badge">{entry.badge}</span>
+                  ) : entry.unavailable && entry.kind !== 'model' ? (
                     <span class="slash-command-badge">disabled in config</span>
                   ) : null}
                 </button>

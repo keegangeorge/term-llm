@@ -21,8 +21,12 @@ export interface Completion {
   value: string;
   label: string;
   description: string;
-  kind: 'slash' | 'agent' | 'mention';
+  kind: 'slash' | 'agent' | 'mention' | 'model';
   streamingSafe?: boolean;
+  /** Keeps the token open after insertion (no trailing space) for a next step. */
+  continues?: boolean;
+  /** Short label shown at the end of the row, such as "latest". */
+  badge?: string;
   replacement?: { start: number; end: number };
   segments?: Array<{ text: string; matched?: boolean }>;
 }
@@ -267,7 +271,7 @@ export function applyCompletion(value: string, completion: string | Completion):
   const inserted = typeof completion === 'string' ? completion : completion.value;
   if (replacement) {
     const after = value.slice(replacement.end);
-    const separator = !after || !/^\s/u.test(after) ? ' ' : '';
+    const separator = !item?.continues && (!after || !/^\s/u.test(after)) ? ' ' : '';
     return (
       value.slice(0, replacement.start) +
       (item?.thinking && !/\s$/.test(value.slice(0, replacement.start)) ? ' ' : '') +
@@ -286,6 +290,6 @@ export function completedCursor(value: string, completion: Completion): number {
     completion.replacement.start +
     (completion.thinking && !/\s$/.test(value.slice(0, completion.replacement.start)) ? 1 : 0) +
     completion.value.length +
-    (!after || !/^\s/u.test(after) ? 1 : 0)
+    (!completion.continues && (!after || !/^\s/u.test(after)) ? 1 : 0)
   );
 }

@@ -248,6 +248,29 @@ response-local and never reused after an attempt discard. Recovery snapshots inc
 The server filters reasoning by source/kind, never sends encrypted or unknown content,
 and applies persistence and character limits independently of the browser display mode.
 
+## Model mentions
+
+Type `@model:` (or the short `@m:`) anywhere in the composer to search the
+models this server can run, then insert the exact reference a sub-agent model
+override expects. For example, `ask a subagent in @m:opus` lists matching
+models from every enabled provider. Choosing one that supports reasoning
+effort keeps the menu open for its efforts; choosing an effort replaces the
+mention with plain text such as `claude-bin:opus-medium`. The **default** row
+inserts the reference without an effort suffix.
+
+The list follows the same rules as the `/model` picker and `spawn_agent`
+validation: only enabled providers appear, and models the provider-wide model
+policy forbids are hidden. Moving aliases such as `opus`, which follow the
+newest model in their family, are marked **latest** and listed ahead of
+pinned versions such as `claude-opus-4-8`. Pick the alias to track new
+releases, or a pinned version for a reproducible choice.
+
+A plain `@` also suggests models when the text starts a provider name or reads
+`provider:...`, alongside the usual file results. Model mentions insert plain
+text: nothing is attached, and the model still decides whether to delegate.
+
+Each `GET /ui/v1/models` item includes an `alias` boolean, `true` for moving aliases.
+
 ## Interactive shell
 
 On supported Unix servers, enter `/shell` in an existing Web UI conversation to open a full-screen terminal in that conversation's authoritative project or worktree. **Back to chat** detaches the browser while leaving the one session shell running; opening `/shell` again reattaches and replays bounded output. **Close shell** explicitly terminates the shell and its process group.

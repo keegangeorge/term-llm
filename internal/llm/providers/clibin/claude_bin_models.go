@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 	"unicode"
@@ -52,6 +53,12 @@ var claudeEffortLevels = []string{"low", "medium", "high", "xhigh", "max"}
 // claudeModelAliases are Claude Code's own short model names, in the order
 // legacy shorthand names are matched against them.
 var claudeModelAliases = []string{"opus", "fable", "haiku", "sonnet"}
+
+// IsClaudeModelAlias reports whether model is one of Claude Code's short
+// names, which move to each family's newest model rather than pinning one.
+func IsClaudeModelAlias(model string) bool {
+	return slices.Contains(claudeModelAliases, strings.ToLower(strings.TrimSpace(model)))
+}
 
 // parseClaudeEffort splits a trailing effort suffix from a model name:
 // "opus-max" -> ("opus", "max"), "claude-mythos-5-1-high" ->
