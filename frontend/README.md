@@ -266,7 +266,7 @@ filters/details and narrow layouts. For external passkey browser coverage, see
 | Hub JS/CSS with exact Hub `?v=`                        | `public, max-age=31536000, immutable`  | Bypass                                                          |
 | Hub JS/CSS without exact Hub version                   | `no-cache` + ETag                      | Bypass                                                          |
 | Hub shell                                              | `no-store`                             | Bypass                                                          |
-| Extension assets under the current generation          | `private, max-age=31536000, immutable` | Bypass                                                          |
+| Extension assets under the current generation          | `private, no-cache` + ETag             | Bypass                                                          |
 | APIs, auth, extension status                           | Existing policies, unchanged           | Bypass                                                          |
 
 Immutable is safe because each chat URL identifies build content, including its

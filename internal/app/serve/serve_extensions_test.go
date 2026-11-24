@@ -102,10 +102,9 @@ func TestExtensionRoutesAndRecovery(t *testing.T) {
 		if w.Code != tc.code {
 			t.Fatalf("%s: %d %s", tc.path, w.Code, w.Body)
 		}
-		// Generation-scoped assets are immutable; reload-needed responses are not.
 		wantCache := "private, no-store"
-		if strings.HasPrefix(tc.path, "/extensions/") && tc.code == 200 {
-			wantCache = "private, max-age=31536000, immutable"
+		if tc.code == http.StatusOK {
+			wantCache = "private, no-cache"
 		}
 		if strings.HasPrefix(tc.path, "/extensions/") && w.Header().Get("Cache-Control") != wantCache {
 			t.Fatalf("%s: asset cache policy %q", tc.path, w.Header().Get("Cache-Control"))
@@ -123,6 +122,54 @@ func TestExtensionRoutesAndRecovery(t *testing.T) {
 		t.Fatal("save did not reload")
 	}
 }
+func TestExtensionAssetRevalidatesAfterAuthAndGenerationCheck(t *testing.T) {
+	e := extensionFixture(t)
+	s := &serveServer{cfg: serveServerConfig{requireAuth: true, token: "secret"}, extensions: e}
+	mux := http.NewServeMux()
+	s.registerExtensionRoutes(mux)
+	status := e.manager.Status()
+	base := "/extensions/" + status.Generation + "/dracula/"
+	request := func(method, name, etag string, signedIn bool) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, base+name, nil)
+		if signedIn {
+			r.Header.Set("Authorization", "Bearer secret")
+		}
+		if etag != "" {
+			r.Header.Set("If-None-Match", etag)
+		}
+		w := httptest.NewRecorder()
+		mux.ServeHTTP(w, r)
+		return w
+	}
+
+	first := request(http.MethodGet, "style.css", "", true)
+	etag := first.Header().Get("ETag")
+	if first.Code != http.StatusOK || etag == "" || first.Body.Len() == 0 {
+		t.Fatalf("initial asset: status %d, ETag %q, body %q", first.Code, etag, first.Body)
+	}
+	for _, method := range []string{http.MethodGet, http.MethodHead} {
+		w := request(method, "style.css", etag, true)
+		if w.Code != http.StatusNotModified || w.Header().Get("ETag") != etag || w.Header().Get("Cache-Control") != "private, no-cache" || w.Body.Len() != 0 {
+			t.Fatalf("%s revalidation: status %d, headers %v, body %q", method, w.Code, w.Header(), w.Body)
+		}
+	}
+	if w := request(http.MethodGet, "main.js", etag, true); w.Code != http.StatusOK || w.Header().Get("ETag") == "" || w.Header().Get("ETag") == etag {
+		t.Fatalf("different asset: status %d, ETag %q", w.Code, w.Header().Get("ETag"))
+	}
+	if w := request(http.MethodGet, "style.css", etag, false); w.Code != http.StatusUnauthorized || w.Header().Get("ETag") != "" {
+		t.Fatalf("unauthenticated revalidation: status %d, headers %v", w.Code, w.Header())
+	}
+	if err := os.WriteFile(filepath.Join(status.Directory, "dracula", "style.css"), []byte("body { color: red; }"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.reload(); err != nil {
+		t.Fatal(err)
+	}
+	if w := request(http.MethodGet, "style.css", etag, true); w.Code != http.StatusGone || w.Header().Get("Cache-Control") != "private, no-store" {
+		t.Fatalf("stale generation: status %d, headers %v", w.Code, w.Header())
+	}
+}
+
 func TestExtensionRoutesRequireAuth(t *testing.T) {
 	s := &serveServer{cfg: serveServerConfig{requireAuth: true, token: "secret"}, extensions: extensionFixture(t)}
 	mux := http.NewServeMux()

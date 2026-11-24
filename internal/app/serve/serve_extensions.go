@@ -325,10 +325,15 @@ func (s *serveServer) handleExtensionAsset(w http.ResponseWriter, r *http.Reques
 		t = "application/octet-stream"
 	}
 	w.Header().Set("Content-Type", t)
-	// The generation in the URL changes with any extension edit and an old
-	// generation gets 410, so a served asset never changes. Caching it keeps a
-	// Hub node switch from downloading every stylesheet, font and module again.
-	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+	// The generation identifies the snapshot, but does not grant continued
+	// access. Revalidate only after auth and the current-generation check.
+	etag := fmt.Sprintf(`"%x"`, sha256.Sum256([]byte(parts[0]+"/"+parts[1])))
+	w.Header().Set("Cache-Control", "private, no-cache")
+	w.Header().Set("ETag", etag)
+	if uiETagMatches(r.Header.Get("If-None-Match"), etag) {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
 	if r.Method == http.MethodGet {
 		_, _ = w.Write(data)
 	}
